@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: Build Maths By Mithlesh Sir APK
@@ -19,10 +22,31 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Decode debug keystore for Firebase Google Sign-In SHA-1
+      - name: Accept Android SDK licenses and ensure SDK 36.1
         run: |
-          if [ -f debug.keystore.base64 ]; then
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+            "$SDKMANAGER" --install "platforms;android-36.1" "platform-tools" "build-tools;36.0.0" || \
+            "$SDKMANAGER" --install "platforms;android-36" "platform-tools" || true
+          fi
+
+      - name: Prepare debug keystore for Firebase Google Sign-In SHA-1
+        run: |
+          if [ -s debug.keystore.base64 ]; then
             base64 --decode debug.keystore.base64 > debug.keystore
+          elif [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v -keystore debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Ensure .env exists from template
+        run: |
+          if [ ! -f .env ] && [ -f .env.example ]; then
+            cp .env.example .env
           fi
 
       - name: Setup Gradle 9.3.1
@@ -31,12 +55,35 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --no-daemon
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK artifact for download
+      - name: Rename APK for direct phone installation
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk Maths-By-Mithlesh-Sir-debug.apk
+          ls -lh Maths-By-Mithlesh-Sir-debug.apk
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Maths-By-Mithlesh-Sir-Debug-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: Maths-By-Mithlesh-Sir-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish direct APK download under GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: Maths By Mithlesh Sir (Latest APK)
+          body: |
+            Automatic Android APK build for **Maths By Mithlesh Sir**.
+
+            Download `Maths-By-Mithlesh-Sir-debug.apk` below and install directly on Android.
+          files: Maths-By-Mithlesh-Sir-debug.apk
+          make_latest: true
+
+      - name: Write Download Summary
+        run: |
+          echo "## Maths By Mithlesh Sir — APK Build Ready" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Direct APK Release**: https://github.com/${{ github.repository }}/releases/tag/latest-apk" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Direct APK File**: https://github.com/${{ github.repository }}/releases/download/latest-apk/Maths-By-Mithlesh-Sir-debug.apk" >> "$GITHUB_STEP_SUMMARY"

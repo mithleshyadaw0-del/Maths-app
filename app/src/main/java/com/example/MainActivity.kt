@@ -408,7 +408,6 @@ private fun AuthenticatedAppShell(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .statusBarsPadding()
         ) {
             when (selectedTab) {
                 StudentTab.HOME -> StudentHomeScreen(
