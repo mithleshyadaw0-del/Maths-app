@@ -22,17 +22,26 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Accept Android SDK licenses and ensure SDK 36.1
+      - name: Accept Android SDK licenses and install SDK 36
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ -x "$SDKMANAGER" ]; then
             yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-            "$SDKMANAGER" --install "platforms;android-36.1" "platform-tools" "build-tools;36.0.0" || \
-            "$SDKMANAGER" --install "platforms;android-36" "platform-tools" || true
+            "$SDKMANAGER" --install "platform-tools" "build-tools;36.0.0" "platforms;android-36" || true
+            "$SDKMANAGER" --install "platforms;android-36.1" || true
           fi
 
-      - name: Prepare debug keystore for Firebase Google Sign-In SHA-1
+      - name: Restore optional google-services.json from GitHub Secret
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ ! -f app/google-services.json ] && [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            echo "Restored app/google-services.json from secret."
+          fi
+
+      - name: Prepare debug keystore
         run: |
           if [ -s debug.keystore.base64 ]; then
             base64 --decode debug.keystore.base64 > debug.keystore
@@ -55,7 +64,18 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        id: gradle_build
+        run: |
+          set -o pipefail
+          gradle :app:assembleDebug --no-daemon --no-configuration-cache --stacktrace 2>&1 | tee gradle-build.log
+
+      - name: Summarize error if Gradle failed
+        if: failure()
+        run: |
+          echo "## Build Error Details" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^(e: |FAILURE:|> |Caused by:)" gradle-build.log | head -n 40 >> "$GITHUB_STEP_SUMMARY" || tail -n 40 gradle-build.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Rename APK for direct phone installation
         run: |
@@ -71,6 +91,7 @@ jobs:
           retention-days: 30
 
       - name: Publish direct APK download under GitHub Releases
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
@@ -85,5 +106,6 @@ jobs:
       - name: Write Download Summary
         run: |
           echo "## Maths By Mithlesh Sir — APK Build Ready" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Actions Artifact**: Download \`Maths-By-Mithlesh-Sir-Debug-APK\` at the bottom of this page." >> "$GITHUB_STEP_SUMMARY"
           echo "- **Direct APK Release**: https://github.com/${{ github.repository }}/releases/tag/latest-apk" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Direct APK File**: https://github.com/${{ github.repository }}/releases/download/latest-apk/Maths-By-Mithlesh-Sir-debug.apk" >> "$GITHUB_STEP_SUMMARY"
