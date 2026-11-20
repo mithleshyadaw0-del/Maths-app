@@ -1,0 +1,562 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL PRIMITIVE HELPERS ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Bootstrapped admin (verified email required to prevent spoofing) OR explicit /admins/{uid} record
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'mithleshyadaw0@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidTimestamp(val) {
+      return val is timestamp && val <= request.time;
+    }
+
+    function isValidCategory(cat) {
+      return cat in ['Navodaya', 'Sainik School', 'Simultala', 'Olympiad'];
+    }
+
+    function hasSubmittedAttempt(testId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)/attempts/$(testId)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)/attempts/$(testId)).data.status == 'submitted';
+    }
+
+    // --- ENTITY VALIDATION BLUEPRINTS ---
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['email', 'name', 'createdAt']) &&
+        data.keys().hasOnly(['email', 'name', 'createdAt']) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'userId', 'name', 'email', 'studentId', 'batch', 'role', 'active',
+          'streakDays', 'totalTestsAttempted', 'totalMarksObtained',
+          'averagePercentage', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId', 'name', 'email', 'studentId', 'batch', 'role', 'active',
+          'streakDays', 'totalTestsAttempted', 'totalMarksObtained',
+          'averagePercentage', 'lastTestDate', 'createdAt', 'updatedAt'
+        ]) &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.email is string && data.email.size() <= 150 &&
+        data.studentId is string && data.studentId.size() >= 1 && data.studentId.size() <= 40 &&
+        data.batch is string && data.batch.size() <= 60 &&
+        data.role in ['student', 'admin'] &&
+        data.active is bool &&
+        data.streakDays is int && data.streakDays >= 0 && data.streakDays <= 10000 &&
+        data.totalTestsAttempted is int && data.totalTestsAttempted >= 0 && data.totalTestsAttempted <= 100000 &&
+        data.totalMarksObtained is number && data.totalMarksObtained >= 0 &&
+        data.averagePercentage is number && data.averagePercentage >= 0 && data.averagePercentage <= 100 &&
+        (!('lastTestDate' in data) || (data.lastTestDate is string && data.lastTestDate.size() <= 20)) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidStudentRosterEntry(data) {
+      return data.keys().hasAll([
+          'studentId', 'name', 'batch', 'targetCategory', 'active',
+          'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'studentId', 'name', 'batch', 'targetCategory', 'active',
+          'linkedUid', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.studentId is string && data.studentId.size() >= 1 && data.studentId.size() <= 40 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.batch is string && data.batch.size() <= 60 &&
+        isValidCategory(data.targetCategory) &&
+        data.active is bool &&
+        (!('linkedUid' in data) || (data.linkedUid is string && data.linkedUid.size() <= 128)) &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidExamTest(data) {
+      return data.keys().hasAll([
+          'title', 'category', 'testType', 'subject', 'durationMinutes',
+          'totalMarks', 'negativeMarking', 'questionCount', 'published',
+          'featuredToday', 'assignmentMode', 'assignedStudentUids',
+          'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'description', 'category', 'testType', 'subject', 'chapter',
+          'durationMinutes', 'totalMarks', 'negativeMarking', 'questionCount',
+          'published', 'featuredToday', 'assignmentMode', 'assignedBatch',
+          'assignedStudentUids', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 400)) &&
+        isValidCategory(data.category) &&
+        data.testType in ['FULL', 'SECTIONAL'] &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+        (!('chapter' in data) || (data.chapter is string && data.chapter.size() <= 80)) &&
+        data.durationMinutes is int && data.durationMinutes >= 1 && data.durationMinutes <= 300 &&
+        data.totalMarks is number && data.totalMarks >= 1 && data.totalMarks <= 1000 &&
+        data.negativeMarking is number && data.negativeMarking >= 0 && data.negativeMarking <= 5 &&
+        data.questionCount is int && data.questionCount >= 0 && data.questionCount <= 200 &&
+        data.published is bool &&
+        data.featuredToday is bool &&
+        data.assignmentMode in ['ALL', 'BATCH', 'STUDENTS'] &&
+        (!('assignedBatch' in data) || (data.assignedBatch is string && data.assignedBatch.size() <= 60)) &&
+        data.assignedStudentUids is list && data.assignedStudentUids.size() <= 200 &&
+        (data.assignedStudentUids.size() == 0 || data.assignedStudentUids[0] is string) &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidExamQuestion(data) {
+      return data.keys().hasAll([
+          'testId', 'orderIndex', 'subject', 'questionText', 'options',
+          'marks', 'published', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'testId', 'orderIndex', 'subject', 'chapter', 'questionText',
+          'options', 'marks', 'published', 'createdAt'
+        ]) &&
+        data.testId is string && isValidId(data.testId) &&
+        data.orderIndex is int && data.orderIndex >= 0 && data.orderIndex <= 200 &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+        (!('chapter' in data) || (data.chapter is string && data.chapter.size() <= 80)) &&
+        data.questionText is string && data.questionText.size() >= 1 && data.questionText.size() <= 1000 &&
+        data.options is list && data.options.size() == 4 && data.options[0] is string &&
+        data.marks is number && data.marks > 0 && data.marks <= 20 &&
+        data.published is bool &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAnswerKey(data) {
+      return data.keys().hasAll([
+          'testId', 'orderIndex', 'correctOptionIndex', 'explanation', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'testId', 'orderIndex', 'correctOptionIndex', 'explanation', 'createdAt'
+        ]) &&
+        data.testId is string && isValidId(data.testId) &&
+        data.orderIndex is int && data.orderIndex >= 0 && data.orderIndex <= 200 &&
+        data.correctOptionIndex is int && data.correctOptionIndex >= 0 && data.correctOptionIndex <= 3 &&
+        data.explanation is string && data.explanation.size() <= 1000 &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidTestAttempt(data) {
+      return data.keys().hasAll([
+          'userId', 'testId', 'status', 'answers', 'markedForReview',
+          'currentQuestionIndex', 'remainingSeconds', 'elapsedSeconds',
+          'startedAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId', 'testId', 'status', 'answers', 'markedForReview',
+          'currentQuestionIndex', 'remainingSeconds', 'elapsedSeconds',
+          'startedAt', 'updatedAt', 'submittedAt'
+        ]) &&
+        data.userId is string && isValidId(data.userId) &&
+        data.testId is string && isValidId(data.testId) &&
+        data.status in ['in_progress', 'submitted'] &&
+        data.answers is map && data.answers.size() <= 200 &&
+        data.markedForReview is list && data.markedForReview.size() <= 200 &&
+        (data.markedForReview.size() == 0 || data.markedForReview[0] is string) &&
+        data.currentQuestionIndex is int && data.currentQuestionIndex >= 0 && data.currentQuestionIndex <= 200 &&
+        data.remainingSeconds is int && data.remainingSeconds >= 0 && data.remainingSeconds <= 18000 &&
+        data.elapsedSeconds is int && data.elapsedSeconds >= 0 && data.elapsedSeconds <= 18000 &&
+        isValidTimestamp(data.startedAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        (!('submittedAt' in data) || isValidTimestamp(data.submittedAt));
+    }
+
+    function isValidTestResult(data) {
+      return data.keys().hasAll([
+          'userId', 'studentName', 'studentRollNo', 'testId', 'testTitle',
+          'category', 'subject', 'totalMarks', 'obtainedMarks', 'percentage',
+          'correctCount', 'wrongCount', 'unattemptedCount', 'accuracy',
+          'timeTakenSeconds', 'subjectBreakdown', 'answers',
+          'submittedAt', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId', 'studentName', 'studentRollNo', 'testId', 'testTitle',
+          'category', 'subject', 'totalMarks', 'obtainedMarks', 'percentage',
+          'correctCount', 'wrongCount', 'unattemptedCount', 'accuracy',
+          'timeTakenSeconds', 'subjectBreakdown', 'answers',
+          'submittedAt', 'createdAt'
+        ]) &&
+        data.userId is string && isValidId(data.userId) &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 80 &&
+        data.studentRollNo is string && data.studentRollNo.size() <= 40 &&
+        data.testId is string && isValidId(data.testId) &&
+        data.testTitle is string && data.testTitle.size() >= 1 && data.testTitle.size() <= 120 &&
+        isValidCategory(data.category) &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+        data.totalMarks is number && data.totalMarks > 0 && data.totalMarks <= 1000 &&
+        data.obtainedMarks is number && data.obtainedMarks >= -500 && data.obtainedMarks <= 1000 &&
+        data.percentage is number && data.percentage >= 0 && data.percentage <= 100 &&
+        data.correctCount is int && data.correctCount >= 0 && data.correctCount <= 200 &&
+        data.wrongCount is int && data.wrongCount >= 0 && data.wrongCount <= 200 &&
+        data.unattemptedCount is int && data.unattemptedCount >= 0 && data.unattemptedCount <= 200 &&
+        data.accuracy is number && data.accuracy >= 0 && data.accuracy <= 100 &&
+        data.timeTakenSeconds is int && data.timeTakenSeconds >= 0 && data.timeTakenSeconds <= 18000 &&
+        data.subjectBreakdown is map && data.subjectBreakdown.size() <= 20 &&
+        data.answers is map && data.answers.size() <= 200 &&
+        isValidTimestamp(data.submittedAt) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return data.keys().hasAll([
+          'userId', 'studentName', 'batch', 'totalMarks', 'averagePercentage',
+          'testsCompleted', 'categoryStats', 'visible', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId', 'studentName', 'batch', 'totalMarks', 'averagePercentage',
+          'testsCompleted', 'categoryStats', 'visible', 'createdAt', 'updatedAt'
+        ]) &&
+        data.userId is string && isValidId(data.userId) &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 80 &&
+        data.batch is string && data.batch.size() <= 60 &&
+        data.totalMarks is number && data.totalMarks >= 0 &&
+        data.averagePercentage is number && data.averagePercentage >= 0 && data.averagePercentage <= 100 &&
+        data.testsCompleted is int && data.testsCompleted >= 0 && data.testsCompleted <= 100000 &&
+        data.categoryStats is map && data.categoryStats.size() <= 10 &&
+        data.visible is bool &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidStudyNotePdf(data) {
+      return data.keys().hasAll([
+          'title', 'subject', 'chapter', 'materialType', 'category',
+          'fileSizeLabel', 'published', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'subject', 'chapter', 'materialType', 'category',
+          'description', 'pdfUrl', 'contentMarkdown', 'fileSizeLabel',
+          'published', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+        data.chapter is string && data.chapter.size() >= 1 && data.chapter.size() <= 80 &&
+        data.materialType in ['NOTES', 'FORMULA_SHEET', 'WORKSHEET', 'PREVIOUS_YEAR'] &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 400)) &&
+        (!('pdfUrl' in data) || (data.pdfUrl is string && data.pdfUrl.size() <= 500)) &&
+        (!('contentMarkdown' in data) || (data.contentMarkdown is string && data.contentMarkdown.size() <= 20000)) &&
+        data.fileSizeLabel is string && data.fileSizeLabel.size() <= 30 &&
+        data.published is bool &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll([
+          'title', 'message', 'targetCategory', 'published', 'createdBy', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'message', 'targetCategory', 'targetBatch', 'published', 'createdBy', 'createdAt'
+        ]) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        data.message is string && data.message.size() >= 2 && data.message.size() <= 1000 &&
+        data.targetCategory is string && data.targetCategory.size() >= 1 && data.targetCategory.size() <= 40 &&
+        (!('targetBatch' in data) || (data.targetBatch is string && data.targetBatch.size() <= 60)) &&
+        data.published is bool &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAppSettings(data) {
+      return data.keys().hasAll([
+          'leaderboardEnabled', 'rankingMode', 'updatedBy', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'leaderboardEnabled', 'rankingMode', 'welcomeMessage', 'updatedBy', 'updatedAt'
+        ]) &&
+        data.leaderboardEnabled is bool &&
+        data.rankingMode in ['PERCENTAGE', 'TOTAL_MARKS'] &&
+        (!('welcomeMessage' in data) || (data.welcomeMessage is string && data.welcomeMessage.size() <= 200)) &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    // --- COLLECTION MATCH RULES ---
+
+    // 1. Trusted Admins Allowlist
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(adminUid) && isValidAdminRecord(incoming());
+      allow update: if isAdmin() && isValidId(adminUid) && isValidAdminRecord(incoming());
+      allow delete: if isAdmin() && isValidId(adminUid);
+    }
+
+    // 2. Private User Profiles (PII isolated to owner & admin)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(userId) && isValidUserProfile(incoming()) && (
+        (isOwner(userId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().role == 'student' &&
+          incoming().active == true) ||
+        (isAdmin() && incoming().userId == userId)
+      );
+      allow update: if isSignedIn() && isValidId(userId) && isValidUserProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt && (
+          // Action: Admin updates student profile or status
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'studentId', 'batch', 'active', 'role', 'updatedAt'
+          ])) ||
+          // Action: Student updates own non-RBAC fields & stats
+          (isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().active == existing().active &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'studentId', 'batch', 'streakDays', 'totalTestsAttempted',
+              'totalMarksObtained', 'averagePercentage', 'lastTestDate', 'updatedAt'
+            ]))
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+
+      // 2a. Private Exam Attempts Subcollection (Auto-save & Terminal Lock)
+      match /attempts/{testId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(testId) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && (isOwner(userId) || isAdmin());
+        allow create: if isSignedIn() && isValidId(userId) && isValidId(testId) &&
+          isOwner(userId) &&
+          isValidTestAttempt(incoming()) &&
+          incoming().userId == userId &&
+          incoming().testId == testId &&
+          incoming().status == 'in_progress' &&
+          exists(/databases/$(database)/documents/tests/$(testId));
+        allow update: if isSignedIn() && isValidId(userId) && isValidId(testId) &&
+          isValidTestAttempt(incoming()) &&
+          incoming().userId == existing().userId &&
+          incoming().testId == existing().testId &&
+          incoming().startedAt == existing().startedAt && (
+            // Action: Admin override
+            isAdmin() ||
+            // Action: Student auto-save progress while in_progress
+            (isOwner(userId) &&
+              existing().status == 'in_progress' &&
+              incoming().status == 'in_progress' &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'answers', 'markedForReview', 'currentQuestionIndex',
+                'remainingSeconds', 'elapsedSeconds', 'updatedAt'
+              ])) ||
+            // Action: Student final submission (terminal state lock)
+            (isOwner(userId) &&
+              existing().status == 'in_progress' &&
+              incoming().status == 'submitted' &&
+              ('submittedAt' in incoming()) &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'answers', 'markedForReview', 'currentQuestionIndex',
+                'remainingSeconds', 'elapsedSeconds', 'status', 'submittedAt', 'updatedAt'
+              ]))
+          );
+        allow delete: if isAdmin() && isValidId(userId) && isValidId(testId);
+      }
+    }
+
+    // 3. Admin-Managed Student ID Roster (No passwords stored)
+    match /student_roster/{rosterId} {
+      allow get: if isSignedIn() && isValidId(rosterId);
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(rosterId) && isValidStudentRosterEntry(incoming()) &&
+        incoming().createdBy == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(rosterId) && isValidStudentRosterEntry(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdBy == existing().createdBy && (
+          // Action: Admin edits roster entry
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'studentId', 'name', 'batch', 'targetCategory', 'active', 'linkedUid', 'updatedAt'
+          ])) ||
+          // Action: Student claims an unlinked active Student ID
+          (existing().active == true &&
+            (!('linkedUid' in existing()) || existing().linkedUid == '') &&
+            incoming().linkedUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['linkedUid', 'updatedAt']))
+        );
+      allow delete: if isAdmin() && isValidId(rosterId);
+    }
+
+    // 4. Exam Tests & Subcollections
+    match /tests/{testId} {
+      allow get: if isSignedIn() && isValidId(testId) && (isAdmin() || existing().published == true);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.published == true);
+      allow create: if isAdmin() && isValidId(testId) && isValidExamTest(incoming()) &&
+        incoming().createdBy == request.auth.uid;
+      allow update: if isAdmin() && isValidId(testId) && isValidExamTest(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'description', 'category', 'testType', 'subject', 'chapter',
+          'durationMinutes', 'totalMarks', 'negativeMarking', 'questionCount',
+          'published', 'featuredToday', 'assignmentMode', 'assignedBatch',
+          'assignedStudentUids', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(testId);
+
+      // 4a. Questions (no answer keys)
+      match /questions/{questionId} {
+        allow get: if isSignedIn() && isValidId(testId) && isValidId(questionId) &&
+          (isAdmin() || existing().published == true);
+        allow list: if isSignedIn() && (isAdmin() || resource.data.published == true);
+        allow create: if isAdmin() && isValidId(testId) && isValidId(questionId) &&
+          isValidExamQuestion(incoming()) &&
+          incoming().testId == testId &&
+          exists(/databases/$(database)/documents/tests/$(testId));
+        allow update: if isAdmin() && isValidId(testId) && isValidId(questionId) &&
+          isValidExamQuestion(incoming()) &&
+          incoming().testId == existing().testId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'orderIndex', 'subject', 'chapter', 'questionText', 'options', 'marks', 'published'
+          ]);
+        allow delete: if isAdmin() && isValidId(testId) && isValidId(questionId);
+      }
+
+      // 4b. Protected Answer Keys (NEVER readable by students before test submission!)
+      match /answer_keys/{questionId} {
+        allow get: if isSignedIn() && isValidId(testId) && isValidId(questionId) &&
+          (isAdmin() || hasSubmittedAttempt(testId));
+        allow list: if isSignedIn() && (isAdmin() || hasSubmittedAttempt(testId));
+        allow create: if isAdmin() && isValidId(testId) && isValidId(questionId) &&
+          isValidAnswerKey(incoming()) &&
+          incoming().testId == testId &&
+          exists(/databases/$(database)/documents/tests/$(testId));
+        allow update: if isAdmin() && isValidId(testId) && isValidId(questionId) &&
+          isValidAnswerKey(incoming()) &&
+          incoming().testId == existing().testId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'orderIndex', 'correctOptionIndex', 'explanation'
+          ]);
+        allow delete: if isAdmin() && isValidId(testId) && isValidId(questionId);
+      }
+    }
+
+    // 5. Submitted Test Results (Deterministic ID {uid}_{testId}, immutable for students)
+    match /results/{resultId} {
+      allow get: if isSignedIn() && isValidId(resultId) &&
+        (isAdmin() || existing().userId == request.auth.uid);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(resultId) &&
+        isValidTestResult(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        resultId == (request.auth.uid + '_' + incoming().testId) &&
+        hasSubmittedAttempt(incoming().testId);
+      allow update: if isAdmin() && isValidId(resultId) &&
+        isValidTestResult(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().testId == existing().testId &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(resultId);
+    }
+
+    // 6. Public Non-PII Leaderboard (Split collection)
+    match /leaderboard/{entryId} {
+      allow get: if isSignedIn() && isValidId(entryId) &&
+        (isAdmin() || existing().visible == true || isOwner(entryId));
+      allow list: if isSignedIn() && (isAdmin() || resource.data.visible == true);
+      allow create: if isSignedIn() && isValidId(entryId) &&
+        isValidLeaderboardEntry(incoming()) &&
+        (isAdmin() || (isOwner(entryId) && incoming().userId == request.auth.uid));
+      allow update: if isSignedIn() && isValidId(entryId) &&
+        isValidLeaderboardEntry(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'studentName', 'batch', 'totalMarks', 'averagePercentage',
+            'testsCompleted', 'categoryStats', 'visible', 'updatedAt'
+          ])) ||
+          (isOwner(entryId) && incoming().diff(existing()).affectedKeys().hasOnly([
+            'studentName', 'batch', 'totalMarks', 'averagePercentage',
+            'testsCompleted', 'categoryStats', 'updatedAt'
+          ]))
+        );
+      allow delete: if isAdmin() && isValidId(entryId);
+    }
+
+    // 7. Study Notes & PDF Library
+    match /notes/{noteId} {
+      allow get: if isSignedIn() && isValidId(noteId) && (isAdmin() || existing().published == true);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.published == true);
+      allow create: if isAdmin() && isValidId(noteId) && isValidStudyNotePdf(incoming()) &&
+        incoming().createdBy == request.auth.uid;
+      allow update: if isAdmin() && isValidId(noteId) && isValidStudyNotePdf(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'subject', 'chapter', 'materialType', 'category',
+          'description', 'pdfUrl', 'contentMarkdown', 'fileSizeLabel',
+          'published', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(noteId);
+    }
+
+    // 8. Announcements
+    match /announcements/{announcementId} {
+      allow get: if isSignedIn() && isValidId(announcementId) && (isAdmin() || existing().published == true);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.published == true);
+      allow create: if isAdmin() && isValidId(announcementId) && isValidAnnouncement(incoming()) &&
+        incoming().createdBy == request.auth.uid;
+      allow update: if isAdmin() && isValidId(announcementId) && isValidAnnouncement(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'message', 'targetCategory', 'targetBatch', 'published'
+        ]);
+      allow delete: if isAdmin() && isValidId(announcementId);
+    }
+
+    // 9. App & Leaderboard Settings
+    match /settings/{settingId} {
+      allow get: if isSignedIn() && isValidId(settingId);
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(settingId) && isValidAppSettings(incoming()) &&
+        incoming().updatedBy == request.auth.uid;
+      allow update: if isAdmin() && isValidId(settingId) && isValidAppSettings(incoming()) &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'leaderboardEnabled', 'rankingMode', 'welcomeMessage', 'updatedBy', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+  }
+}

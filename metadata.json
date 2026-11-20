@@ -1,0 +1,6 @@
+{
+  "name": "Maths By Mithlesh Sir",
+  "description": "Free educational mock test, PDF notes, and leaderboard platform for Navodaya (JNVST), Sainik School, Simultala, and Olympiad exams with Student and Admin dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

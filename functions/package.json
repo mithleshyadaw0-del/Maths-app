@@ -1,0 +1,15 @@
+{
+  "name": "maths-by-mithlesh-sir-functions",
+  "description": "Cloud Functions for Maths By Mithlesh Sir (Trusted scoring, Custom Claims, Student management, FCM announcements)",
+  "scripts": {
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0"
+  }
+}

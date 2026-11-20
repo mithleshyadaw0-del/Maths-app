@@ -1,0 +1,273 @@
+{
+  "entities": {
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized administrator identity record.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Admin email address" },
+        "name": { "type": "string", "description": "Admin display name" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["email", "name", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user account profile containing student metadata and aggregate performance metrics.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full display name" },
+        "email": { "type": "string", "description": "Google account email" },
+        "studentId": { "type": "string", "description": "Student ID or Roll Number" },
+        "batch": { "type": "string", "description": "Assigned coaching batch" },
+        "role": { "type": "string", "enum": ["student", "admin"], "description": "User role" },
+        "active": { "type": "boolean", "description": "Whether student account is active" },
+        "streakDays": { "type": "integer", "description": "Actual consecutive test activity streak in days" },
+        "totalTestsAttempted": { "type": "integer", "description": "Total completed tests count" },
+        "totalMarksObtained": { "type": "number", "description": "Cumulative marks earned across submitted tests" },
+        "averagePercentage": { "type": "number", "description": "Average percentage across submitted tests" },
+        "lastTestDate": { "type": "string", "description": "YYYY-MM-DD date of last submitted test" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "name", "email", "studentId", "batch", "role", "active", "streakDays", "totalTestsAttempted", "totalMarksObtained", "averagePercentage", "createdAt", "updatedAt"]
+    },
+    "StudentRosterEntry": {
+      "title": "StudentRosterEntry",
+      "description": "Admin-created Student ID / Roll Number roster record for onboarding without passwords.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "description": "Unique Student ID or Roll Number" },
+        "name": { "type": "string", "description": "Student full name" },
+        "batch": { "type": "string", "description": "Assigned batch name" },
+        "targetCategory": { "type": "string", "enum": ["Navodaya", "Sainik School", "Simultala", "Olympiad"] },
+        "active": { "type": "boolean", "description": "Active status" },
+        "linkedUid": { "type": "string", "description": "Firebase Auth UID once linked" },
+        "createdBy": { "type": "string", "description": "Admin UID" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "name", "batch", "targetCategory", "active", "createdBy", "createdAt", "updatedAt"]
+    },
+    "ExamTest": {
+      "title": "ExamTest",
+      "description": "Full or Sectional exam configuration published by admin.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["Navodaya", "Sainik School", "Simultala", "Olympiad"] },
+        "testType": { "type": "string", "enum": ["FULL", "SECTIONAL"] },
+        "subject": { "type": "string" },
+        "chapter": { "type": "string" },
+        "durationMinutes": { "type": "integer" },
+        "totalMarks": { "type": "number" },
+        "negativeMarking": { "type": "number" },
+        "questionCount": { "type": "integer" },
+        "published": { "type": "boolean" },
+        "featuredToday": { "type": "boolean" },
+        "assignmentMode": { "type": "string", "enum": ["ALL", "BATCH", "STUDENTS"] },
+        "assignedBatch": { "type": "string" },
+        "assignedStudentUids": { "type": "array" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "testType", "subject", "durationMinutes", "totalMarks", "negativeMarking", "questionCount", "published", "featuredToday", "assignmentMode", "assignedStudentUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "ExamQuestion": {
+      "title": "ExamQuestion",
+      "description": "Student-visible question stem and 4 options without answer key.",
+      "type": "object",
+      "properties": {
+        "testId": { "type": "string" },
+        "orderIndex": { "type": "integer" },
+        "subject": { "type": "string" },
+        "chapter": { "type": "string" },
+        "questionText": { "type": "string" },
+        "options": { "type": "array" },
+        "marks": { "type": "number" },
+        "published": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["testId", "orderIndex", "subject", "questionText", "options", "marks", "published", "createdAt"]
+    },
+    "QuestionAnswerKey": {
+      "title": "QuestionAnswerKey",
+      "description": "Protected answer key and detailed solution unlocked only after test submission.",
+      "type": "object",
+      "properties": {
+        "testId": { "type": "string" },
+        "orderIndex": { "type": "integer" },
+        "correctOptionIndex": { "type": "integer" },
+        "explanation": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["testId", "orderIndex", "correctOptionIndex", "explanation", "createdAt"]
+    },
+    "TestAttempt": {
+      "title": "TestAttempt",
+      "description": "Auto-saved and submitted exam attempt per student per test.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "testId": { "type": "string" },
+        "status": { "type": "string", "enum": ["in_progress", "submitted"] },
+        "answers": { "type": "object" },
+        "markedForReview": { "type": "array" },
+        "currentQuestionIndex": { "type": "integer" },
+        "remainingSeconds": { "type": "integer" },
+        "elapsedSeconds": { "type": "integer" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "submittedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "testId", "status", "answers", "markedForReview", "currentQuestionIndex", "remainingSeconds", "elapsedSeconds", "startedAt", "updatedAt"]
+    },
+    "TestResult": {
+      "title": "TestResult",
+      "description": "Immutable scored result of a submitted exam.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentRollNo": { "type": "string" },
+        "testId": { "type": "string" },
+        "testTitle": { "type": "string" },
+        "category": { "type": "string" },
+        "subject": { "type": "string" },
+        "totalMarks": { "type": "number" },
+        "obtainedMarks": { "type": "number" },
+        "percentage": { "type": "number" },
+        "correctCount": { "type": "integer" },
+        "wrongCount": { "type": "integer" },
+        "unattemptedCount": { "type": "integer" },
+        "accuracy": { "type": "number" },
+        "timeTakenSeconds": { "type": "integer" },
+        "subjectBreakdown": { "type": "object" },
+        "answers": { "type": "object" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "studentName", "studentRollNo", "testId", "testTitle", "category", "subject", "totalMarks", "obtainedMarks", "percentage", "correctCount", "wrongCount", "unattemptedCount", "accuracy", "timeTakenSeconds", "subjectBreakdown", "answers", "submittedAt", "createdAt"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public non-PII leaderboard ranking aggregated from actual submitted results.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "batch": { "type": "string" },
+        "totalMarks": { "type": "number" },
+        "averagePercentage": { "type": "number" },
+        "testsCompleted": { "type": "integer" },
+        "categoryStats": { "type": "object" },
+        "visible": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "studentName", "batch", "totalMarks", "averagePercentage", "testsCompleted", "categoryStats", "visible", "createdAt", "updatedAt"]
+    },
+    "StudyNotePdf": {
+      "title": "StudyNotePdf",
+      "description": "Subject-wise PDF notes, formula sheets, worksheets, and previous year papers.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "chapter": { "type": "string" },
+        "materialType": { "type": "string", "enum": ["NOTES", "FORMULA_SHEET", "WORKSHEET", "PREVIOUS_YEAR"] },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "pdfUrl": { "type": "string" },
+        "contentMarkdown": { "type": "string" },
+        "fileSizeLabel": { "type": "string" },
+        "published": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "subject", "chapter", "materialType", "category", "fileSizeLabel", "published", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Teacher announcement broadcast to students.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "targetCategory": { "type": "string" },
+        "targetBatch": { "type": "string" },
+        "published": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "targetCategory", "published", "createdBy", "createdAt"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global leaderboard and platform display settings.",
+      "type": "object",
+      "properties": {
+        "leaderboardEnabled": { "type": "boolean" },
+        "rankingMode": { "type": "string", "enum": ["PERCENTAGE", "TOTAL_MARKS"] },
+        "welcomeMessage": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["leaderboardEnabled", "rankingMode", "updatedBy", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted admin allowlist documents."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profiles isolated by UID."
+    },
+    "/student_roster/{rosterId}": {
+      "schema": { "$ref": "#/entities/StudentRosterEntry" },
+      "description": "Admin-managed Student IDs and Roll Numbers."
+    },
+    "/tests/{testId}": {
+      "schema": { "$ref": "#/entities/ExamTest" },
+      "description": "Published and draft exam test metadata."
+    },
+    "/tests/{testId}/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/ExamQuestion" },
+      "description": "Student-facing questions without answer keys."
+    },
+    "/tests/{testId}/answer_keys/{questionId}": {
+      "schema": { "$ref": "#/entities/QuestionAnswerKey" },
+      "description": "Protected answer keys and explanations unlocked only after submission."
+    },
+    "/users/{userId}/attempts/{testId}": {
+      "schema": { "$ref": "#/entities/TestAttempt" },
+      "description": "Private auto-saved and submitted test attempts."
+    },
+    "/results/{resultId}": {
+      "schema": { "$ref": "#/entities/TestResult" },
+      "description": "Submitted test results keyed by {userId}_{testId}."
+    },
+    "/leaderboard/{entryId}": {
+      "schema": { "$ref": "#/entities/LeaderboardEntry" },
+      "description": "Non-PII student leaderboard entries."
+    },
+    "/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/StudyNotePdf" },
+      "description": "Study notes, formula sheets, worksheets, and previous year papers."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Teacher announcements."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Application and leaderboard configuration."
+    }
+  }
+}

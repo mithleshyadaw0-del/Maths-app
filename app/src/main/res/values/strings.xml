@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">Maths By Mithlesh Sir</string>
+    <string name="app_tagline_hi">सीखें गणित, बढ़ें सफलता की ओर</string>
+    <string name="app_tagline_en">Learn • Practice • Achieve</string>
+    <string name="brand_short">MBS</string>
+    <string name="free_for_all_badge">100% Free for All Students</string>
+    <string name="welcome_back">Welcome Back!</string>
+    <string name="admin_login_title">Admin Login</string>
+    <string name="admin_login_subtitle">Authorized Teacher Account</string>
+    <string name="student_login_title">Student Login</string>
+    <string name="student_login_subtitle">Student ID &amp; Google Sign-In</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="nav_home">होम</string>
+    <string name="nav_tests">टेस्ट</string>
+    <string name="nav_notes">नोट्स</string>
+    <string name="nav_leaderboard">रैंक</string>
+    <string name="nav_profile">प्रोफ़ाइल</string>
+    <string name="home_study_prompt">आज कितना पढ़ोगे?</string>
+    <string name="today_mock_test">आज का मॉक टेस्ट</string>
+    <string name="start_test_hi">टेस्ट शुरू करें</string>
+    <string name="choose_exam_hi">परीक्षा चुनें</string>
+    <string name="full_test_title">Full Test</string>
+    <string name="full_test_subtitle">सभी विषय एक साथ, असली परीक्षा जैसा</string>
+    <string name="sectional_test_title">Sectional Test</string>
+    <string name="sectional_test_subtitle">एक-एक विषय की अलग तैयारी</string>
+    <string name="previous_hi">पिछला</string>
+    <string name="next_hi">अगला</string>
+    <string name="submit_test">Submit Test</string>
+    <string name="clear_response">Clear</string>
+    <string name="mark_for_review">Mark for Review</string>
+    <string name="view_solutions_hi">उत्तर देखें</string>
+    <string name="subject_wise_hi">विषय अनुसार</string>
+    <string name="teacher_name">Mithlesh Sir</string>
+    <string name="teacher_role">Founder &amp; Senior Mathematics Educator</string>
+    <string name="teacher_bio">Dedicated to free, high-quality entrance exam preparation for Navodaya (JNVST), Sainik School, Simultala, and Mathematics Olympiad students across India.</string>
+</resources>
